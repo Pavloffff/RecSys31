@@ -12,7 +12,10 @@ import sys
 import logging
 from pathlib import Path
 from typing import Optional
+from dotenv import load_dotenv
+import os
 
+load_dotenv()
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
@@ -20,6 +23,7 @@ from src.loaders import load_user_events, load_reference_data
 from src.preprocessing import merge_events_with_items
 from src.features import create_user_features
 from src.portraits import create_user_portrait_from_features, print_user_portrait, save_portrait_to_json
+from src.recommendations import generate_recommendations_with_llm, print_recommendations, save_recommendations_to_json
 
 logging.basicConfig(
     level=logging.INFO,
@@ -93,16 +97,27 @@ def process_user_portrait(
     channels: list,
     max_files: Optional[int],
     sample_ratio: Optional[int],
-    output_path: Optional[str] = None
+    output_path: Optional[str] = None,
+    generate_recommendations: bool = True,
+    llm_api_key: Optional[str] = None,
+    llm_model: str = "google/gemini-2.5-flash",
+    base_url: str = "https://openrouter.ai/api/v1",
+    products_path: Optional[str] = None
 ) -> int:
     """
-    Обрабатывает портрет пользователя.
+    Обрабатывает портрет пользователя и генерирует рекомендации.
     
     :param user_id: ID пользователя
     :param base_path: Базовый путь к данным
     :param channels: Список каналов
     :param max_files: Максимальное количество файлов
     :param sample_ratio: Коэффициент выборки файлов
+    :param output_path: Путь для сохранения портрета
+    :param generate_recommendations: Генерировать ли рекомендации через LLM
+    :param llm_api_key: API ключ для LLM
+    :param llm_model: Модель LLM для использования
+    :param base_url: Базовый URL для LLM API
+    :param products_path: Путь к файлу с информацией о продуктах
     :return: Код возврата (0 = успех, 1 = ошибка)
     """
     try:
@@ -149,13 +164,40 @@ def process_user_portrait(
         
         print_user_portrait(portrait)
         
+        # Сохраняем портрет
         if output_path:
             save_portrait_to_json(portrait, output_path)
+            portrait_output = output_path
         else:
             output_dir = project_root / "output"
             output_dir.mkdir(exist_ok=True)
             default_output = output_dir / f"user_portrait_{user_id}.json"
             save_portrait_to_json(portrait, str(default_output))
+            portrait_output = str(default_output)
+        
+        if generate_recommendations:
+            logger.info("🤖 ШАГ 6: Генерация рекомендаций продуктов с LLM...")
+            try:
+                recommendations = generate_recommendations_with_llm(
+                    portrait=portrait,
+                    products_path=products_path,
+                    api_key=llm_api_key,
+                    model=llm_model,
+                    base_url=base_url
+                )
+                
+                if recommendations:
+                    print_recommendations(recommendations)
+                    
+                    output_dir = project_root / "output"
+                    output_dir.mkdir(exist_ok=True)
+                    rec_output = output_dir / f"user_recommendations_{user_id}.json"
+                    save_recommendations_to_json(recommendations, str(rec_output))
+                else:
+                    logger.warning("⚠️  Не удалось сгенерировать рекомендации")
+                    
+            except Exception as e:
+                logger.error(f"❌ Ошибка при генерации рекомендаций: {e}", exc_info=True)
         
         return 0
         
@@ -185,6 +227,12 @@ def main():
   
   # С сохранением результата
   python main.py --user_id 25770580 --output user_portrait.json
+  
+  # С генерацией рекомендаций через LLM
+  python main.py --user_id 25770580 --generate_recommendations
+  
+  # С указанием модели LLM
+  python main.py --user_id 25770580 --generate_recommendations --llm_model gpt-4
         """
     )
     
@@ -238,6 +286,50 @@ def main():
         help='Уровень логирования (по умолчанию: INFO)'
     )
     
+    parser.add_argument(
+        '--generate_recommendations',
+        action='store_true',
+        help='Генерировать рекомендации продуктов с использованием LLM'
+    )
+    
+    parser.add_argument(
+        '--no_recommendations',
+        action='store_false',
+        dest='generate_recommendations',
+        help='Отключить генерацию рекомендаций (по умолчанию: включено)'
+    )
+    
+    # Устанавливаем значение по умолчанию после парсинга
+    parser.set_defaults(generate_recommendations=True)
+    
+    parser.add_argument(
+        '--llm_api_key',
+        type=str,
+        default=None,
+        help='API ключ для LLM (если не указан, берется из переменной окружения OPENAI_API_KEY или OPENROUTER_API_KEY)'
+    )
+    
+    parser.add_argument(
+        '--llm_model',
+        type=str,
+        default='google/gemini-2.5-flash',
+        help='Модель LLM для использования (по умолчанию: google/gemini-2.5-flash)'
+    )
+    
+    parser.add_argument(
+        '--llm_base_url',
+        type=str,
+        default='https://openrouter.ai/api/v1',
+        help='Базовый URL для LLM API (по умолчанию: https://openrouter.ai/api/v1)'
+    )
+    
+    parser.add_argument(
+        '--products_path',
+        type=str,
+        default=None,
+        help='Путь к файлу с информацией о продуктах (по умолчанию: research/psb_products.md)'
+    )
+    
     args = parser.parse_args()
     
     # Устанавливаем уровень логирования
@@ -253,6 +345,12 @@ def main():
         print(f"Макс. файлов на канал: {args.max_files}")
     if args.sample_ratio:
         print(f"Выборка файлов: каждый {args.sample_ratio}-й")
+    if args.generate_recommendations:
+        print(f"🤖 Генерация рекомендаций: ВКЛЮЧЕНО")
+        print(f"   Модель: {args.llm_model}")
+        print(f"   API URL: {args.llm_base_url}")
+    else:
+        print(f"🤖 Генерация рекомендаций: ОТКЛЮЧЕНО")
     print()
     
     # Валидация аргументов
@@ -266,7 +364,12 @@ def main():
         channels=args.channels,
         max_files=args.max_files,
         sample_ratio=args.sample_ratio,
-        output_path=args.output
+        output_path=args.output,
+        generate_recommendations=args.generate_recommendations,
+        llm_api_key=args.llm_api_key,
+        llm_model=args.llm_model,
+        base_url=args.llm_base_url,
+        products_path=args.products_path
     )
     
     if exit_code == 0:
