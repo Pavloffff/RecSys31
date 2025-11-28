@@ -83,7 +83,6 @@ def load_and_validate_user_data(user_id: int, base_path: str) -> tuple:
         users_df = users_df[users_df['user_id'] == user_id].copy()
         items_dict = datasets['items_dict']
         
-        logger.info(f"✅ Справочные данные загружены")
         return users_df, items_dict
         
     except Exception as e:
@@ -121,12 +120,10 @@ def process_user_portrait(
     :return: Код возврата (0 = успех, 1 = ошибка)
     """
     try:
-        logger.info("📚 ШАГ 1: Загрузка справочных данных...")
         users_df, items_dict = load_and_validate_user_data(user_id, base_path)
         if users_df is None:
             return 1
         
-        logger.info("📥 ШАГ 2: Загрузка событий пользователя...")
         user_events = load_user_events(
             user_id=user_id,
             base_path=base_path,
@@ -136,23 +133,15 @@ def process_user_portrait(
         )
         
         if len(user_events) == 0:
-            logger.warning(f"⚠️  Пользователь {user_id} не имеет событий")
-            logger.info("   Создаем портрет с нулевыми признаками...")
-        else:
-            logger.info(f"✅ Загружено {len(user_events):,} событий")
+            logger.warning(f"Пользователь {user_id} не имеет событий")
         
-        logger.info("🔗 ШАГ 3: Объединение событий с данными о товарах...")
         events_merged = merge_events_with_items(user_events, items_dict)
         
-        logger.info("📊 ШАГ 4: Создание признаков пользователя...")
         user_features_df = create_user_features(
             events_df=events_merged,
             users_df=users_df,
             items_dict=items_dict
         )
-        logger.info(f"✅ Создано признаков для пользователя")
-        
-        logger.info("👤 ШАГ 5: Генерация портрета пользователя...")
         portrait = create_user_portrait_from_features(
             user_id=user_id,
             user_features_df=user_features_df
@@ -164,19 +153,15 @@ def process_user_portrait(
         
         print_user_portrait(portrait)
         
-        # Сохраняем портрет
         if output_path:
             save_portrait_to_json(portrait, output_path)
-            portrait_output = output_path
         else:
             output_dir = project_root / "output"
             output_dir.mkdir(exist_ok=True)
             default_output = output_dir / f"user_portrait_{user_id}.json"
             save_portrait_to_json(portrait, str(default_output))
-            portrait_output = str(default_output)
         
         if generate_recommendations:
-            logger.info("🤖 ШАГ 6: Генерация рекомендаций продуктов с LLM...")
             try:
                 recommendations = generate_recommendations_with_llm(
                     portrait=portrait,
@@ -194,7 +179,7 @@ def process_user_portrait(
                     rec_output = output_dir / f"user_recommendations_{user_id}.json"
                     save_recommendations_to_json(recommendations, str(rec_output))
                 else:
-                    logger.warning("⚠️  Не удалось сгенерировать рекомендации")
+                    logger.warning("Не удалось сгенерировать рекомендации")
                     
             except Exception as e:
                 logger.error(f"❌ Ошибка при генерации рекомендаций: {e}", exc_info=True)
@@ -332,32 +317,13 @@ def main():
     
     args = parser.parse_args()
     
-    # Устанавливаем уровень логирования
     logging.getLogger().setLevel(getattr(logging, args.log_level))
     
-    print("="*60)
-    print("🚀 ГЕНЕРАЦИЯ ПОРТРЕТА ПОЛЬЗОВАТЕЛЯ")
-    print("="*60)
-    print(f"Пользователь: {args.user_id}")
-    print(f"Базовый путь: {args.base_path}")
-    print(f"Каналы: {', '.join(args.channels)}")
-    if args.max_files:
-        print(f"Макс. файлов на канал: {args.max_files}")
-    if args.sample_ratio:
-        print(f"Выборка файлов: каждый {args.sample_ratio}-й")
-    if args.generate_recommendations:
-        print(f"🤖 Генерация рекомендаций: ВКЛЮЧЕНО")
-        print(f"   Модель: {args.llm_model}")
-        print(f"   API URL: {args.llm_base_url}")
-    else:
-        print(f"🤖 Генерация рекомендаций: ОТКЛЮЧЕНО")
-    print()
+    logger.info(f"Генерация портрета пользователя {args.user_id}")
     
-    # Валидация аргументов
     if not validate_args(args):
         return 1
     
-    # Обработка портрета
     exit_code = process_user_portrait(
         user_id=args.user_id,
         base_path=args.base_path,
@@ -371,11 +337,6 @@ def main():
         base_url=args.llm_base_url,
         products_path=args.products_path
     )
-    
-    if exit_code == 0:
-        print("="*60)
-        print("✅ ГЕНЕРАЦИЯ ПОРТРЕТА ЗАВЕРШЕНА УСПЕШНО")
-        print("="*60)
     
     return exit_code
 

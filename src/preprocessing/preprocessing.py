@@ -22,11 +22,9 @@ def merge_events_with_items(
     :raises ValueError: Если events_df не содержит колонку 'channel'
     """
     if len(events_df) == 0:
-        logger.info("⚠️  Пустой DataFrame событий, возвращаем как есть")
         return events_df
     
     if 'channel' not in events_df.columns:
-        logger.warning("⚠️  Колонка 'channel' отсутствует, возвращаем события без объединения")
         return events_df
     
     merged_events_list = []
@@ -38,7 +36,6 @@ def merge_events_with_items(
         items_df = items_dict.get(items_key)
         
         if items_df is not None and len(items_df) > 0 and len(channel_events) > 0:
-            logger.info(f"  Объединение канала {channel}...")
             try:
                 channel_merged = channel_events.merge(
                     items_df,
@@ -47,18 +44,14 @@ def merge_events_with_items(
                     suffixes=('', '_item')
                 )
                 merged_events_list.append(channel_merged)
-            except KeyError as e:
-                logger.warning(f"  ⚠️  Ошибка при объединении канала {channel}: {e}")
+            except KeyError:
                 merged_events_list.append(channel_events)
         elif len(channel_events) > 0:
-            logger.warning(f"  ⚠️  Данные о товарах для канала {channel} не найдены")
             merged_events_list.append(channel_events)
     
     if merged_events_list:
         events_merged = pd.concat(merged_events_list, ignore_index=True)
-        logger.info(f"✅ Объединено {len(events_merged):,} событий с товарами")
         return events_merged
     
-    logger.warning("⚠️  Использованы события без объединения")
     return events_df
 

@@ -3,8 +3,11 @@
 """
 
 import pandas as pd
+import logging
 from datetime import datetime
 from typing import Dict, Optional
+
+logger = logging.getLogger(__name__)
 
 
 def create_user_portrait_from_features(
@@ -18,20 +21,14 @@ def create_user_portrait_from_features(
     :param user_features_df: DataFrame с признаками пользователей
     :return: Словарь с портретом пользователя или None, если пользователь не найден
     """
-    print(f"\n{'='*60}")
-    print(f"⚡ ГЕНЕРАЦИЯ ПОРТРЕТА ПОЛЬЗОВАТЕЛЯ: {user_id}")
-    print(f"{'='*60}")
-    
-    # Извлекаем признаки пользователя
     user_features = user_features_df[user_features_df['user_id'] == user_id]
     
     if len(user_features) == 0:
-        print(f"❌ Пользователь {user_id} не найден в признаках")
+        logger.error(f"❌ Пользователь {user_id} не найден в признаках")
         return None
     
     user_features = user_features.iloc[0]
     
-    # Формируем портрет из предобработанных признаков
     portrait = {
         'user_id': int(user_id),
         'socdem_cluster': user_features.get('socdem_cluster'),
@@ -77,8 +74,6 @@ def create_user_portrait_from_features(
         'max_price_interest': float(user_features.get('max_price_interest', 0)),
         'price_range': float(user_features.get('price_range', 0)),
     }
-    
-    print("✅ Портрет создан на основе предобработанных признаков")
     
     return portrait
 
@@ -148,12 +143,10 @@ def save_portrait_to_json(portrait: Optional[Dict], output_path: str) -> None:
     :param output_path: Путь для сохранения файла
     """
     if portrait is None:
-        print("❌ Нечего сохранять: портрет не найден")
         return
     
     import json
     
-    # Конвертируем datetime и другие типы для JSON
     portrait_json = {}
     for k, v in portrait.items():
         if isinstance(v, (pd.Timestamp, datetime)):
@@ -165,6 +158,4 @@ def save_portrait_to_json(portrait: Optional[Dict], output_path: str) -> None:
     
     with open(output_path, 'w', encoding='utf-8') as f:
         json.dump(portrait_json, f, indent=2, ensure_ascii=False, default=str)
-    
-    print(f"💾 Портрет сохранен в {output_path}")
 

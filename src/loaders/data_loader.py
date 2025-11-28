@@ -94,17 +94,6 @@ def _load_events_from_channel(
         logger.warning(f"Файлы событий не найдены в {events_path}")
         return []
     
-    # Применяем выборку файлов
-    if sample_ratio is not None and sample_ratio > 1:
-        event_files = event_files[::sample_ratio]
-        logger.info(f"  Канал {channel}: выборка каждого {sample_ratio}-го файла")
-    
-    # Ограничиваем количество файлов
-    if max_files_per_channel is not None:
-        event_files = event_files[:max_files_per_channel]
-        logger.info(f"  Канал {channel}: ограничение до {max_files_per_channel} файлов")
-    
-    logger.info(f"  Загрузка канала {channel} ({len(event_files)} файлов)...")
     
     all_events = []
     base_date = datetime(2020, 1, 1)
@@ -115,14 +104,12 @@ def _load_events_from_channel(
             if df is None or len(df) == 0:
                 continue
             
-            # Фильтруем по пользователю
             if user_filter is not None:
                 col, value = user_filter
                 if col not in df.columns:
                     continue
                 df = df[df[col] == value].copy()
             
-            # Фильтруем по списку пользователей
             if sample_users is not None:
                 if 'user_id' not in df.columns:
                     continue
@@ -165,8 +152,6 @@ def load_user_events(
     if channels is None:
         channels = ['marketplace', 'retail', 'offers']
     
-    logger.info(f"📥 Загрузка событий для пользователя {user_id}...")
-    
     all_events = []
     for channel in channels:
         channel_events = _load_events_from_channel(
@@ -179,12 +164,11 @@ def load_user_events(
         all_events.extend(channel_events)
     
     if all_events:
-        logger.info("🔗 Объединение событий...")
         combined = pd.concat(all_events, ignore_index=True)
-        logger.info(f"✅ Загружено {len(combined):,} событий для пользователя {user_id}")
+        logger.info(f"Загружено {len(combined):,} событий для пользователя {user_id}")
         return combined.sort_values(['user_id', 'datetime'])
     
-    logger.warning(f"⚠️  События для пользователя {user_id} не найдены")
+    logger.warning(f"События для пользователя {user_id} не найдены")
     return pd.DataFrame()
 
 
@@ -213,8 +197,6 @@ def load_all_events(
     if channels is None:
         channels = ['marketplace', 'retail', 'offers']
     
-    logger.info("📥 Загрузка всех событий...")
-    
     all_events = []
     for channel in channels:
         channel_events = _load_events_from_channel(
@@ -227,12 +209,11 @@ def load_all_events(
         all_events.extend(channel_events)
     
     if all_events:
-        logger.info("🔗 Объединение событий...")
         combined = pd.concat(all_events, ignore_index=True)
-        logger.info(f"✅ Загружено {len(combined):,} событий")
+        logger.info(f"Загружено {len(combined):,} событий")
         return combined.sort_values(['user_id', 'datetime'])
     
-    logger.warning("⚠️  События не найдены")
+    logger.warning("События не найдены")
     return pd.DataFrame()
 
 
@@ -249,30 +230,21 @@ def load_reference_data(base_path: str = "./t_ecd_data/dataset/small") -> Dict[s
         raise FileNotFoundError(f"Базовый путь не найден: {base_path}")
     
     datasets = {}
-    logger.info("📚 Загрузка справочных данных...")
     
-    # Загружаем пользователей
     users_path = base_path_obj / "users.pq"
     if users_path.exists():
         datasets['users'] = load_parquet_without_embeddings(str(users_path))
-        if datasets['users'] is not None:
-            logger.info(f"  ✅ Пользователи: {len(datasets['users']):,} записей")
-        else:
+        if datasets['users'] is None:
             raise ValueError(f"Не удалось загрузить пользователей из {users_path}")
     else:
         raise FileNotFoundError(f"Файл пользователей не найден: {users_path}")
     
-    # Загружаем бренды
     brands_path = base_path_obj / "brands.pq"
     if brands_path.exists():
         datasets['brands'] = load_parquet_without_embeddings(str(brands_path))
-        if datasets['brands'] is not None:
-            logger.info(f"  ✅ Бренды: {len(datasets['brands']):,} записей")
     else:
-        logger.warning(f"  ⚠️  Файл брендов не найден: {brands_path}")
         datasets['brands'] = pd.DataFrame()
     
-    # Загружаем товары по каналам
     channels = ['marketplace', 'retail', 'offers']
     items_dict = {}
     
@@ -283,13 +255,10 @@ def load_reference_data(base_path: str = "./t_ecd_data/dataset/small") -> Dict[s
             if items_df is not None:
                 datasets[f'{channel}_items'] = items_df
                 items_dict[f'{channel}_items'] = items_df
-                logger.info(f"  ✅ Товары {channel}: {len(items_df):,} записей")
         else:
-            logger.warning(f"  ⚠️  Файл товаров {channel} не найден: {items_path}")
             datasets[f'{channel}_items'] = pd.DataFrame()
             items_dict[f'{channel}_items'] = pd.DataFrame()
     
     datasets['items_dict'] = items_dict
-    logger.info(f"✅ Загружено справочников: {len(datasets)}")
     return datasets
 

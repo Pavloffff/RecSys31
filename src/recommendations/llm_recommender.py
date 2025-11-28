@@ -22,7 +22,6 @@ def load_products_info(products_path: Optional[str] = None) -> str:
     :return: Текст с информацией о продуктах
     """
     if products_path is None:
-        # Путь по умолчанию
         project_root = Path(__file__).parent.parent.parent
         products_path = project_root / "research" / "psb_products.md"
     
@@ -35,7 +34,6 @@ def load_products_info(products_path: Optional[str] = None) -> str:
     try:
         with open(products_path, 'r', encoding='utf-8') as f:
             products_text = f.read()
-        logger.info(f"✅ Загружена информация о продуктах из {products_path}")
         return products_text
     except Exception as e:
         logger.error(f"Ошибка при загрузке продуктов: {e}")
@@ -172,8 +170,6 @@ def call_llm_api(prompt: str, api_key: Optional[str] = None, model: str = "gpt-4
         
         client = OpenAI(api_key=api_key, base_url=base_url)
         
-        logger.info(f"🤖 Отправка запроса в LLM (модель: {model}, base_url: {base_url})...")
-        
         messages = [
             {
                 "role": "system",
@@ -203,7 +199,6 @@ def call_llm_api(prompt: str, api_key: Optional[str] = None, model: str = "gpt-4
                 )
         except Exception as e:
             if not is_openrouter:
-                logger.warning(f"Попытка без response_format из-за ошибки: {e}")
                 response = client.chat.completions.create(
                     model=model,
                     messages=messages,
@@ -213,7 +208,6 @@ def call_llm_api(prompt: str, api_key: Optional[str] = None, model: str = "gpt-4
                 raise
         
         result = response.choices[0].message.content
-        logger.info("✅ Получен ответ от LLM")
         return result
         
     except ImportError:
@@ -244,12 +238,10 @@ def parse_llm_response(response: str) -> Optional[Dict[str, Any]]:
                 response = response[start_idx:end_idx]
         
         recommendations = json.loads(response)
-        logger.info("✅ Рекомендации успешно распарсены")
         return recommendations
         
     except json.JSONDecodeError as e:
         logger.error(f"Ошибка при парсинге JSON ответа: {e}")
-        logger.debug(f"Ответ LLM: {response[:500]}...")
         return None
     except Exception as e:
         logger.error(f"Неожиданная ошибка при парсинге ответа: {e}")
@@ -272,8 +264,6 @@ def generate_recommendations_with_llm(
     :param model: Модель LLM для использования
     :return: Словарь с рекомендациями или None в случае ошибки
     """
-    logger.info("🎯 Генерация рекомендаций с использованием LLM...")
-    
     products_text = load_products_info(products_path)
     
     portrait_text = format_portrait_for_prompt(portrait)
@@ -287,10 +277,6 @@ def generate_recommendations_with_llm(
         return None
     
     recommendations = parse_llm_response(response)
-    
-    if recommendations:
-        logger.info(f"✅ Сгенерировано {len(recommendations.get('recommendations', []))} рекомендаций")
-    
     return recommendations
 
 
@@ -329,12 +315,12 @@ def print_recommendations(recommendations: Optional[Dict[str, Any]]) -> None:
             print(f"   Ключевые преимущества:")
             for benefit in benefits:
                 print(f"     • {benefit}")
-        print()
+        print("")
     
     summary = recommendations.get('summary', '')
     if summary:
         print(f"📋 Резюме: {summary}")
-        print()
+        print("")
 
 
 def save_recommendations_to_json(
@@ -348,7 +334,6 @@ def save_recommendations_to_json(
     :param output_path: Путь для сохранения файла
     """
     if not recommendations:
-        logger.warning("Нечего сохранять: рекомендации отсутствуют")
         return
     
     try:
@@ -358,10 +343,6 @@ def save_recommendations_to_json(
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(recommendations, f, indent=2, ensure_ascii=False, default=str)
         
-        logger.info(f"💾 Рекомендации сохранены в {output_path}")
-        print(f"💾 Рекомендации сохранены в {output_path}")
-        
     except Exception as e:
         logger.error(f"Ошибка при сохранении рекомендаций: {e}")
-        print(f"❌ Ошибка при сохранении рекомендаций: {e}")
 
