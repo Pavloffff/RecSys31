@@ -15,7 +15,7 @@ async def main():
     
     for message in consumer.listen():
         try:
-            logger.debug(f'received message: {message}')
+            logger.info(f'received message: {message}')
             await processor.process(message)
         except Exception as e:
             logger.error(e)

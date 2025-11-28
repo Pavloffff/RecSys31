@@ -1,4 +1,26 @@
 services:
+  recsys-web-backend:
+    build:
+      context: .
+      dockerfile: ./product/build/web_backend.dockerfile
+    depends_on:
+      - recsys-kafka
+      - recsys-llm-api
+    environment:
+      KAFKA_HOST: recsys-kafka
+      KAFKA_PORT: 9092
+      KAFKA_LLM_TOPIC: recsys_llm_topic
+      KAFKA_LLM_GROUP_ID: recsys-llm-group
+      KAFKA_AUTO_OFFSET_RESET: earliest
+      KAFKA_ENABLE_AUTO_COMMIT: 1
+      KAFKA_INITIAL_TIMEOUT: 20
+      KAFKA_RETRY_TIMEOUT: 10
+    ports:
+      - '8001:8000' # удалить
+    networks:
+      - recsys-network
+    restart: on-failure
+  
   recsys-llm-api:
     build:
       context: .

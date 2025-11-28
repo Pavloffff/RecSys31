@@ -12,7 +12,7 @@ from services.logger.logger import logger
 class Consumer:
     def __init__(self, config: KafkaConfig, codec: AbstractCodec):
         self._config: KafkaConfig = config
-        self._codec = AbstractCodec
+        self._codec = codec
         self._consumer = self._connect()
     
     def listen(self):
@@ -33,6 +33,6 @@ class Consumer:
                 logger.info('Connected to kafka')
                 return consumer
             except NoBrokersAvailable:
-                logger.warning('Kafka is not available. Retry at {self._initial_timeout} seconds')
+                logger.warning(f'Kafka is not available. Retry at {self._config.initial_timeout} seconds')
                 time.sleep(self._config.initial_timeout)
     
