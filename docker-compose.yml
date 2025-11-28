@@ -1,0 +1,57 @@
+services:
+  recsys-llm-api:
+    build:
+      context: .
+      dockerfile: ./product/build/llm_api.dockerfile
+    depends_on:
+      - recsys-kafka
+    environment:
+      KAFKA_HOST: recsys-kafka
+      KAFKA_PORT: 9092
+      KAFKA_LLM_TOPIC: recsys_llm_topic
+      KAFKA_LLM_GROUP_ID: recsys-llm-group
+      KAFKA_AUTO_OFFSET_RESET: earliest
+      KAFKA_ENABLE_AUTO_COMMIT: 1
+      KAFKA_INITIAL_TIMEOUT: 20
+    networks:
+      - recsys-network
+    restart: on-failure  
+
+  recsys-kafka:
+    image: confluentinc/cp-kafka:7.9.4
+    depends_on:
+      - recsys-zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: recsys-zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://recsys-kafka:9092
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_LOG4J_LOGGERS: 'kafka.controller=INFO,kafka.producer.async.DefaultEventHandler=INFO,state.change.logger=INFO'
+      KAFKA_LOG4J_ROOT_LOGLEVEL: 'ERROR'
+    ports:
+      - '9092:9092' # удалить
+    networks:
+      - recsys-network
+    restart: on-failure
+    logging:
+      driver: 'none'
+
+  recsys-zookeeper:
+    image: confluentinc/cp-zookeeper:7.9.4
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - '2181:2181' # удалить
+    networks:
+      - recsys-network
+    restart: on-failure
+
+    logging:
+      driver: 'none'
+
+
+networks:
+  recsys-network:
+    driver: bridge
