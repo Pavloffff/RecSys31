@@ -1,0 +1,282 @@
+"""
+Главный скрипт для генерации портрета одного пользователя.
+
+Использование:
+    python main.py --user_id 25770580
+    python main.py --user_id 25770580 --max_files 10 --sample_ratio 5
+"""
+
+import argparse
+import os
+import sys
+import logging
+from pathlib import Path
+from typing import Optional
+
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
+from src.loaders import load_user_events, load_reference_data
+from src.preprocessing import merge_events_with_items
+from src.features import create_user_features
+from src.portraits import create_user_portrait_from_features, print_user_portrait, save_portrait_to_json
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
+
+
+def validate_args(args) -> bool:
+    """
+    Валидирует аргументы командной строки.
+    
+    :param args: Аргументы парсера
+    :return: True если валидация прошла успешно
+    """
+    if args.user_id <= 0:
+        logger.error(f"❌ Некорректный user_id: {args.user_id}")
+        return False
+    
+    if args.max_files is not None and args.max_files <= 0:
+        logger.error(f"❌ max_files должен быть положительным числом: {args.max_files}")
+        return False
+    
+    if args.sample_ratio is not None and args.sample_ratio <= 0:
+        logger.error(f"❌ sample_ratio должен быть положительным числом: {args.sample_ratio}")
+        return False
+    
+    base_path = Path(args.base_path)
+    if not base_path.exists():
+        logger.error(f"❌ Базовый путь не существует: {args.base_path}")
+        return False
+    
+    return True
+
+
+def load_and_validate_user_data(user_id: int, base_path: str) -> tuple:
+    """
+    Загружает и валидирует данные пользователя.
+    
+    :param user_id: ID пользователя
+    :param base_path: Базовый путь к данным
+    :return: Кортеж (users_df, items_dict) или (None, None) при ошибке
+    """
+    try:
+        datasets = load_reference_data(base_path=base_path)
+        
+        users_df = datasets['users']
+        if users_df is None or len(users_df) == 0:
+            logger.error("❌ Справочник пользователей пуст")
+            return None, None
+        
+        if user_id not in users_df['user_id'].values:
+            logger.error(f"❌ Пользователь {user_id} не найден в справочнике")
+            return None, None
+        
+        users_df = users_df[users_df['user_id'] == user_id].copy()
+        items_dict = datasets['items_dict']
+        
+        logger.info(f"✅ Справочные данные загружены")
+        return users_df, items_dict
+        
+    except Exception as e:
+        logger.error(f"❌ Ошибка при загрузке справочных данных: {e}", exc_info=True)
+        return None, None
+
+
+def process_user_portrait(
+    user_id: int,
+    base_path: str,
+    channels: list,
+    max_files: Optional[int],
+    sample_ratio: Optional[int],
+    output_path: Optional[str] = None
+) -> int:
+    """
+    Обрабатывает портрет пользователя.
+    
+    :param user_id: ID пользователя
+    :param base_path: Базовый путь к данным
+    :param channels: Список каналов
+    :param max_files: Максимальное количество файлов
+    :param sample_ratio: Коэффициент выборки файлов
+    :return: Код возврата (0 = успех, 1 = ошибка)
+    """
+    try:
+        logger.info("📚 ШАГ 1: Загрузка справочных данных...")
+        users_df, items_dict = load_and_validate_user_data(user_id, base_path)
+        if users_df is None:
+            return 1
+        
+        logger.info("📥 ШАГ 2: Загрузка событий пользователя...")
+        user_events = load_user_events(
+            user_id=user_id,
+            base_path=base_path,
+            channels=channels,
+            max_files_per_channel=max_files,
+            sample_ratio=sample_ratio
+        )
+        
+        if len(user_events) == 0:
+            logger.warning(f"⚠️  Пользователь {user_id} не имеет событий")
+            logger.info("   Создаем портрет с нулевыми признаками...")
+        else:
+            logger.info(f"✅ Загружено {len(user_events):,} событий")
+        
+        logger.info("🔗 ШАГ 3: Объединение событий с данными о товарах...")
+        events_merged = merge_events_with_items(user_events, items_dict)
+        
+        logger.info("📊 ШАГ 4: Создание признаков пользователя...")
+        user_features_df = create_user_features(
+            events_df=events_merged,
+            users_df=users_df,
+            items_dict=items_dict
+        )
+        logger.info(f"✅ Создано признаков для пользователя")
+        
+        logger.info("👤 ШАГ 5: Генерация портрета пользователя...")
+        portrait = create_user_portrait_from_features(
+            user_id=user_id,
+            user_features_df=user_features_df
+        )
+        
+        if portrait is None:
+            logger.error(f"❌ Не удалось создать портрет для пользователя {user_id}")
+            return 1
+        
+        print_user_portrait(portrait)
+        
+        if output_path:
+            save_portrait_to_json(portrait, output_path)
+        else:
+            output_dir = project_root / "output"
+            output_dir.mkdir(exist_ok=True)
+            default_output = output_dir / f"user_portrait_{user_id}.json"
+            save_portrait_to_json(portrait, str(default_output))
+        
+        return 0
+        
+    except Exception as e:
+        logger.error(f"❌ Критическая ошибка: {e}", exc_info=True)
+        return 1
+
+
+def main():
+    """Главная функция для генерации портрета пользователя."""
+    parser = argparse.ArgumentParser(
+        description='Генерация портрета пользователя на основе событий',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Примеры использования:
+  # Базовый запуск для одного пользователя
+  python main.py --user_id 25770580
+  
+  # С ограничением количества файлов (быстрее)
+  python main.py --user_id 25770580 --max_files 10
+  
+  # С выборкой файлов (каждый 5-й файл)
+  python main.py --user_id 25770580 --sample_ratio 5
+  
+  # С указанием каналов
+  python main.py --user_id 25770580 --channels marketplace retail
+  
+  # С сохранением результата
+  python main.py --user_id 25770580 --output user_portrait.json
+        """
+    )
+    
+    parser.add_argument(
+        '--user_id',
+        type=int,
+        required=True,
+        help='ID пользователя для генерации портрета'
+    )
+    
+    parser.add_argument(
+        '--base_path',
+        type=str,
+        default='./data/t_ecd_data/dataset/small',
+        help='Базовый путь к данным (по умолчанию: ./data/t_ecd_data/dataset/small)'
+    )
+    
+    parser.add_argument(
+        '--channels',
+        nargs='+',
+        default=['marketplace', 'retail', 'offers'],
+        help='Каналы для загрузки (по умолчанию: все каналы)'
+    )
+    
+    parser.add_argument(
+        '--max_files',
+        type=int,
+        default=None,
+        help='Максимальное количество файлов на канал (для ускорения)'
+    )
+    
+    parser.add_argument(
+        '--sample_ratio',
+        type=int,
+        default=None,
+        help='Загружать каждый N-й файл (для ускорения, например: 5 = каждый 5-й файл)'
+    )
+    
+    parser.add_argument(
+        '--output',
+        type=str,
+        default=None,
+        help='Путь для сохранения портрета в JSON (опционально)'
+    )
+    
+    parser.add_argument(
+        '--log_level',
+        type=str,
+        default='INFO',
+        choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'],
+        help='Уровень логирования (по умолчанию: INFO)'
+    )
+    
+    args = parser.parse_args()
+    
+    # Устанавливаем уровень логирования
+    logging.getLogger().setLevel(getattr(logging, args.log_level))
+    
+    print("="*60)
+    print("🚀 ГЕНЕРАЦИЯ ПОРТРЕТА ПОЛЬЗОВАТЕЛЯ")
+    print("="*60)
+    print(f"Пользователь: {args.user_id}")
+    print(f"Базовый путь: {args.base_path}")
+    print(f"Каналы: {', '.join(args.channels)}")
+    if args.max_files:
+        print(f"Макс. файлов на канал: {args.max_files}")
+    if args.sample_ratio:
+        print(f"Выборка файлов: каждый {args.sample_ratio}-й")
+    print()
+    
+    # Валидация аргументов
+    if not validate_args(args):
+        return 1
+    
+    # Обработка портрета
+    exit_code = process_user_portrait(
+        user_id=args.user_id,
+        base_path=args.base_path,
+        channels=args.channels,
+        max_files=args.max_files,
+        sample_ratio=args.sample_ratio,
+        output_path=args.output
+    )
+    
+    if exit_code == 0:
+        print("="*60)
+        print("✅ ГЕНЕРАЦИЯ ПОРТРЕТА ЗАВЕРШЕНА УСПЕШНО")
+        print("="*60)
+    
+    return exit_code
+
+
+if __name__ == '__main__':
+    exit(main())
+
