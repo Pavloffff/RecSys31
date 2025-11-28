@@ -13,13 +13,23 @@ async def main():
     codec = JsonCodec()
     consumer = Consumer(config.kafka, codec)
 
-    for message in consumer.listen():
+    kafka_task = asyncio.create_task(_listen_kafka(consumer))
+    
+    try:
+        await asyncio.gather(kafka_task)
+    finally:
+        kafka_task.cancel()
+
+
+async def _listen_kafka(consumer: Consumer):
+    async for message in consumer.listen():
         try:
             logger.info(f'received message: {message}')
             logger.info(f'WEB received answer: {Answer(text=message["text"])}')
-        except Exception as e:
-            logger.error(e)
+        except Exception as ex:
+            logger.error(ex)
             continue
+
 
 if __name__ == '__main__':
     asyncio.run(main())
