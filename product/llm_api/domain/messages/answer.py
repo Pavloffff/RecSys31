@@ -1,7 +1,5 @@
 from pydantic import BaseModel
 
 
-class Request(BaseModel):
-    context: str
+class Answer(BaseModel):
     text: str
-    

@@ -35,6 +35,8 @@ services:
       KAFKA_AUTO_OFFSET_RESET: earliest
       KAFKA_ENABLE_AUTO_COMMIT: 1
       KAFKA_INITIAL_TIMEOUT: 20
+      YANDEX_GPT_FOLDER_ID: ${YANDEX_GPT_FOLDER_ID}
+      YANDEX_GPT_API_KEY: ${YANDEX_GPT_API_KEY}
     networks:
       - recsys-network
     restart: on-failure  

@@ -2,4 +2,5 @@ from pydantic import BaseModel
 
 
 class Message(BaseModel):
-    pass
+    text: str
+    context: str
