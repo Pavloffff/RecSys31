@@ -1,4 +1,24 @@
 services:
+  recsys-web:
+    build:
+      context: .
+      dockerfile: ./product/build/web.dockerfile
+    depends_on:
+      - recsys-kafka
+      - recsys-web-backend
+    environment:
+      KAFKA_HOST: recsys-kafka
+      KAFKA_PORT: 9092
+      KAFKA_OUT_TOPIC: recsys_out_topic
+      KAFKA_OUT_GROUP_ID: recsys-out-group
+      KAFKA_AUTO_OFFSET_RESET: earliest
+      KAFKA_ENABLE_AUTO_COMMIT: 1
+      KAFKA_INITIAL_TIMEOUT: 20
+      KAFKA_RETRY_TIMEOUT: 10
+    networks:
+      - recsys-network
+    restart: on-failure
+
   recsys-web-backend:
     build:
       context: .
@@ -32,6 +52,8 @@ services:
       KAFKA_PORT: 9092
       KAFKA_LLM_TOPIC: recsys_llm_topic
       KAFKA_LLM_GROUP_ID: recsys-llm-group
+      KAFKA_OUT_TOPIC: recsys_out_topic
+      KAFKA_OUT_GROUP_ID: recsys-out-group
       KAFKA_AUTO_OFFSET_RESET: earliest
       KAFKA_ENABLE_AUTO_COMMIT: 1
       KAFKA_INITIAL_TIMEOUT: 20

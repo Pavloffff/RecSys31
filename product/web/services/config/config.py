@@ -8,11 +8,6 @@ from services.config.exceptions import ImproperlyConfigured
 from services.logger.logger import logger
 
 
-class YandexApiConfig(BaseModel):
-    folder_id: str
-    api_key: str
-
-
 class KafkaConfig(BaseModel):
     host: str
     port: int
@@ -24,24 +19,12 @@ class KafkaConfig(BaseModel):
 
 
 class Config(BaseModel):
-    llm_kafka: KafkaConfig
-    out_kafka: KafkaConfig
-    yandex_api: YandexApiConfig
+    kafka: KafkaConfig
     
     @classmethod
     def from_env(cls) -> 'Config':
-        logger.info(cls._getenv('KAFKA_PORT', int))
         return Config(
-            llm_kafka=KafkaConfig(
-                host=cls._getenv('KAFKA_HOST'),
-                port=cls._getenv('KAFKA_PORT', int),
-                topic=cls._getenv('KAFKA_LLM_TOPIC'),
-                auto_offset_reset=cls._getenv('KAFKA_AUTO_OFFSET_RESET'),
-                enable_auto_commit=bool(cls._getenv('KAFKA_ENABLE_AUTO_COMMIT', int)),
-                group_id=cls._getenv('KAFKA_LLM_GROUP_ID'),
-                initial_timeout=cls._getenv('KAFKA_INITIAL_TIMEOUT', int)
-            ),
-            out_kafka=KafkaConfig(
+            kafka=KafkaConfig(
                 host=cls._getenv('KAFKA_HOST'),
                 port=cls._getenv('KAFKA_PORT', int),
                 topic=cls._getenv('KAFKA_OUT_TOPIC'),
@@ -50,10 +33,6 @@ class Config(BaseModel):
                 group_id=cls._getenv('KAFKA_OUT_GROUP_ID'),
                 initial_timeout=cls._getenv('KAFKA_INITIAL_TIMEOUT', int)
             ),
-            yandex_api=YandexApiConfig(
-                api_key=cls._getenv('YANDEX_GPT_API_KEY'),
-                folder_id=cls._getenv('YANDEX_GPT_FOLDER_ID')
-            )
         )
     
     @staticmethod

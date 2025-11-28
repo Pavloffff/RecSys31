@@ -5,7 +5,7 @@ from domain.llm.base_llm import BaseLlm
 from services.config.config import YandexApiConfig
 
 
-# TODO: убрать хардкод
+# TODO: убрать хардкод, переписать на асинхронную
 class YandexApiLlm(BaseLlm):
     def __init__(self, config: YandexApiConfig):
         self._config = config
