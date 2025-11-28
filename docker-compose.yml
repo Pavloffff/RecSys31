@@ -1,4 +1,24 @@
 services:
+  recsys-web:
+    build:
+      context: .
+      dockerfile: ./product/build/web.dockerfile
+    depends_on:
+      - recsys-kafka
+      - recsys-web-backend
+    environment:
+      KAFKA_HOST: recsys-kafka
+      KAFKA_PORT: 9092
+      KAFKA_OUT_TOPIC: recsys_out_topic
+      KAFKA_OUT_GROUP_ID: recsys-out-group
+      KAFKA_AUTO_OFFSET_RESET: earliest
+      KAFKA_ENABLE_AUTO_COMMIT: 1
+      KAFKA_INITIAL_TIMEOUT: 20
+      KAFKA_RETRY_TIMEOUT: 10
+    networks:
+      - recsys-network
+    restart: on-failure
+
   recsys-web-backend:
     build:
       context: .
@@ -32,6 +52,8 @@ services:
       KAFKA_PORT: 9092
       KAFKA_LLM_TOPIC: recsys_llm_topic
       KAFKA_LLM_GROUP_ID: recsys-llm-group
+      KAFKA_OUT_TOPIC: recsys_out_topic
+      KAFKA_OUT_GROUP_ID: recsys-out-group
       KAFKA_AUTO_OFFSET_RESET: earliest
       KAFKA_ENABLE_AUTO_COMMIT: 1
       KAFKA_INITIAL_TIMEOUT: 20
@@ -39,7 +61,7 @@ services:
       YANDEX_GPT_API_KEY: ${YANDEX_GPT_API_KEY}
     networks:
       - recsys-network
-    restart: on-failure  
+    restart: on-failure
 
   recsys-kafka:
     image: confluentinc/cp-kafka:7.9.4
@@ -75,6 +97,23 @@ services:
     logging:
       driver: 'none'
 
+  recsys-database:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - '5433:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./product/database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - recsys-network
+    restart: always
+
+volumes:
+  postgres_data:
 
 networks:
   recsys-network:
