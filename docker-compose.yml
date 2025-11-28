@@ -61,7 +61,7 @@ services:
       YANDEX_GPT_API_KEY: ${YANDEX_GPT_API_KEY}
     networks:
       - recsys-network
-    restart: on-failure  
+    restart: on-failure
 
   recsys-kafka:
     image: confluentinc/cp-kafka:7.9.4
@@ -97,6 +97,23 @@ services:
     logging:
       driver: 'none'
 
+  recsys-database:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - '5433:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./product/database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - recsys-network
+    restart: always
+
+volumes:
+  postgres_data:
 
 networks:
   recsys-network:
