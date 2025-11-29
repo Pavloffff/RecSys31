@@ -1,7 +1,3 @@
-"""
-Процессор для обработки запросов на рекомендации продуктов.
-"""
-
 from typing import Dict, Any, Optional
 from pathlib import Path
 
@@ -39,11 +35,11 @@ class RecommendationProcessor:
             portrait = get_user_portrait_from_db(request.user_id, self._db_config)
             
             if portrait is None:
-                logger.warning(f"Портрет пользователя {request.user_id} не найден в БД")
+                logger.error(f"Критическая ошибка: get_user_portrait_from_db вернул None для пользователя {request.user_id}")
                 return RecommendationResponse(
                     user_id=request.user_id,
                     success=False,
-                    error="Пользователь не найден"
+                    error="Критическая ошибка при получении портрета пользователя"
                 )
             
             recommendations = generate_recommendations_with_llm(portrait)
