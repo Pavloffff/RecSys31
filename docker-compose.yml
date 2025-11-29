@@ -79,6 +79,8 @@ services:
     environment:
       KAFKA_HOST: recsys-kafka
       KAFKA_PORT: 9092
+      KAFKA_RECSYS_TOPIC: recsys_llm_topic
+      KAFKA_RECSYS_GROUP_ID: recsys-api-group
       KAFKA_LLM_TOPIC: recsys_llm_topic
       KAFKA_LLM_GROUP_ID: recsys-llm-group
       KAFKA_OUT_TOPIC: recsys_out_topic
