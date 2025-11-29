@@ -39,3 +39,22 @@
 ![ex2_1](./example2_input.jpeg)
 ![ex2_2](./example2_res.jpeg)
 
+### Гайд по деплою
+
+1. Скопировть .env файл и поменять секреты на свои:
+
+```
+cp .env.example .env
+```
+
+2. Запустить проект в docker-compose
+
+```
+docker-compose up
+```
+
+3. Streamlit-интерфейс доступен по адресу:
+
+```
+http://localhost:8501/
+```
