@@ -144,15 +144,25 @@ def main():
     
     if current_message:
         try:
-            recommendations = current_message.get("recommendations", {})
+            recommendations_data = current_message.get("recommendations", [])
             summary = current_message.get("summary", "")
+            
+            # Handle nested structure: recommendations might be a dict with 'recommendations' and 'summary' keys
+            if isinstance(recommendations_data, dict):
+                # Extract the actual recommendations list and summary if nested
+                recommendations = recommendations_data.get("recommendations", [])
+                if not summary and "summary" in recommendations_data:
+                    summary = recommendations_data.get("summary", "")
+            else:
+                recommendations = recommendations_data
+            
             st.success("✅ Данные получены из Kafka")
         except Exception as e:
             st.error(f"Ошибка обработки: {e}")
-            recommendations = {}
+            recommendations = []
             summary = ""
     else:
-        recommendations = {}
+        recommendations = []
         summary = ""
     
     if st.button("Обновить данные"):
@@ -166,7 +176,13 @@ def main():
     logger.info(f'GET RECS: {recommendations}')
     # sorted_recommendations = sorted(recommendations, key=lambda x: x["priority"])
 
-    for rec in recommendations.values():
+    # Ensure recommendations is a list
+    if not isinstance(recommendations, list):
+        recommendations = []
+    
+    recommendations_list = recommendations
+
+    for rec in recommendations_list:
         # logger.info(rec_raw)
         # rec = json.loads(rec_raw)
         with st.container():
