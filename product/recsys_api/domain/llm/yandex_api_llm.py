@@ -57,7 +57,11 @@ class YandexApiLlm(BaseLlm):
         :raises: Exception при ошибке API или таймауте
         """
         try:
+            input_text = context + question
+            input_tokens_estimate = int(len(input_text) / 5.3)
+            
             logger.info(f"RecSys LLM: Отправка запроса в Yandex API (timeout={self._timeout}s)")
+            logger.info(f"RecSys LLM: Входные токены (приблизительно): {input_tokens_estimate} (context: {len(context)} символов, question: {len(question)} символов)")
             logger.debug(f"RecSys LLM: Context length: {len(context)}, Question length: {len(question)}")
             
             response = self._client.responses.create(
@@ -67,7 +71,12 @@ class YandexApiLlm(BaseLlm):
             )
             
             output_text = response.output_text
+            # Подсчет токенов на выходе
+            output_tokens_estimate = int(len(output_text) / 5.3)
+            
             logger.info(f"RecSys LLM: Получен ответ от Yandex API (length: {len(output_text)} символов)")
+            logger.info(f"RecSys LLM: Выходные токены (приблизительно): {output_tokens_estimate}")
+            logger.info(f"RecSys LLM: Всего токенов (вход + выход): {input_tokens_estimate + output_tokens_estimate}")
             logger.debug(f"RecSys LLM: Response preview: {output_text[:500]}{'...' if len(output_text) > 500 else ''}")
             
             return output_text

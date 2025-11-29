@@ -99,6 +99,7 @@ class DatabaseLoader:
     ) -> pd.DataFrame:
         """
         Загружает события для конкретного пользователя из БД.
+        Цены и категории подтягиваются из соответствующих таблиц товаров по каналам.
 
         :param user_id: ID пользователя
         :param channels: Список каналов для загрузки (None = все каналы)
@@ -109,23 +110,30 @@ class DatabaseLoader:
 
         conn = self._get_connection()
         try:
-            placeholders = ','.join(['%s'] * len(channels))
-            query = f"""
-                SELECT 
-                    user_id,
-                    item_id,
-                    channel,
-                    action_type,
-                    timestamp,
-                    price,
-                    category,
-                    brand_id
-                FROM public.event
-                WHERE user_id = %s
-                AND channel IN ({placeholders})
-                ORDER BY timestamp
-            """
-            params = (user_id,) + tuple(channels)
+            union_queries = []
+            for channel in channels:
+                union_queries.append(f"""
+                    SELECT 
+                        e.user_id,
+                        e.item_id,
+                        e.channel,
+                        e.action_type,
+                        e.timestamp,
+                        i.price,
+                        i.category,
+                        i.brand_id
+                    FROM public.event e
+                    LEFT JOIN public.{channel}_item i ON e.item_id = i.item_id
+                    WHERE e.user_id = %s AND e.channel = %s
+                """)
+            
+            query = " UNION ALL ".join(union_queries) + " ORDER BY timestamp"
+            
+            # Параметры: для каждого канала нужны user_id и channel
+            params = []
+            for channel in channels:
+                params.extend([user_id, channel])
+            
             df = pd.read_sql_query(query, conn, params=params)
             
             if len(df) > 0:
@@ -146,6 +154,7 @@ class DatabaseLoader:
     ) -> pd.DataFrame:
         """
         Загружает все события из БД с возможностью фильтрации.
+        Цены и категории подтягиваются из соответствующих таблиц товаров по каналам.
 
         :param channels: Список каналов для загрузки (None = все каналы)
         :param sample_users: Список user_id для фильтрации (None = все пользователи)
@@ -157,38 +166,42 @@ class DatabaseLoader:
 
         conn = self._get_connection()
         try:
-            query_parts = [
-                "SELECT",
-                "    user_id,",
-                "    item_id,",
-                "    channel,",
-                "    action_type,",
-                "    timestamp,",
-                "    price,",
-                "    category,",
-                "    brand_id",
-                "FROM public.event",
-                "WHERE 1=1"
-            ]
-            params = []
-
-            if channels:
-                placeholders = ','.join(['%s'] * len(channels))
-                query_parts.append(f"AND channel IN ({placeholders})")
-                params.extend(channels)
-
+            # Собираем события из всех каналов с JOIN к соответствующим таблицам товаров
+            union_queries = []
+            for channel in channels:
+                query_parts = [
+                    f"""SELECT 
+                        e.user_id,
+                        e.item_id,
+                        e.channel,
+                        e.action_type,
+                        e.timestamp,
+                        i.price,
+                        i.category,
+                        i.brand_id
+                    FROM public.event e
+                    LEFT JOIN public.{channel}_item i ON e.item_id = i.item_id
+                    WHERE e.channel = %s"""
+                ]
+                union_queries.append(" ".join(query_parts))
+            
+            query = " UNION ALL ".join(union_queries)
+            params = list(channels)
+            
             if sample_users:
-                user_placeholders = ','.join(['%s'] * len(sample_users))
-                query_parts.append(f"AND user_id IN ({user_placeholders})")
+                # Оборачиваем UNION ALL в подзапрос и фильтруем
+                query = f"""
+                    SELECT * FROM ({query}) AS combined_events
+                    WHERE user_id IN ({','.join(['%s'] * len(sample_users))})
+                """
                 params.extend(sample_users)
-
-            query_parts.append("ORDER BY timestamp")
-
+            
+            query += " ORDER BY timestamp"
+            
             if limit:
-                query_parts.append("LIMIT %s")
+                query += " LIMIT %s"
                 params.append(limit)
 
-            query = "\n".join(query_parts)
             df = pd.read_sql_query(query, conn, params=params)
 
             if len(df) > 0:
@@ -203,7 +216,7 @@ class DatabaseLoader:
 
     def load_reference_data(self) -> Dict[str, pd.DataFrame]:
         """
-        Загружает справочные данные (пользователи, товары, бренды) из БД.
+        Загружает справочные данные (пользователи, товары, бренды, кластеры) из БД.
 
         :return: Словарь с DataFrame справочников
         """
@@ -211,7 +224,7 @@ class DatabaseLoader:
         datasets = {}
         
         try:
-            users_query = "SELECT user_id, name FROM public.user"
+            users_query = "SELECT user_id, name, cluster_id FROM public.user"
             datasets['users'] = pd.read_sql_query(users_query, conn)
             
             if datasets['users'] is None or len(datasets['users']) == 0:
@@ -221,6 +234,11 @@ class DatabaseLoader:
             datasets['brands'] = pd.read_sql_query(brands_query, conn)
             if datasets['brands'] is None or len(datasets['brands']) == 0:
                 datasets['brands'] = pd.DataFrame()
+            
+            clusters_query = "SELECT cluster_id, description FROM public.cluster"
+            datasets['clusters'] = pd.read_sql_query(clusters_query, conn)
+            if datasets['clusters'] is None or len(datasets['clusters']) == 0:
+                datasets['clusters'] = pd.DataFrame()
             
             channels = ['marketplace', 'retail', 'offers']
             items_dict = {}
@@ -332,6 +350,7 @@ def get_user_portrait_from_db(
         try:
             reference_data = loader.load_reference_data()
             users_df = reference_data.get('users', pd.DataFrame())
+            clusters_df = reference_data.get('clusters', pd.DataFrame())
         except Exception as e:
             logger.warning(f"Не удалось загрузить справочные данные: {e}. Создается дефолтный портрет")
             return create_default_portrait(user_id)
@@ -354,6 +373,19 @@ def get_user_portrait_from_db(
         if portrait is None:
             logger.warning(f"Не удалось создать портрет для пользователя {user_id} из признаков. Создается дефолтный портрет")
             return create_default_portrait(user_id)
+        
+        # Добавляем описание кластера из справочника
+        cluster_id = user_row.iloc[0].get('cluster_id')
+        if cluster_id is not None and len(clusters_df) > 0:
+            cluster_row = clusters_df[clusters_df['cluster_id'] == cluster_id]
+            if len(cluster_row) > 0:
+                portrait['cluster_description'] = cluster_row.iloc[0]['description']
+                logger.info(f"Добавлено описание кластера {cluster_id} для пользователя {user_id}")
+            else:
+                portrait['cluster_description'] = None
+                logger.warning(f"Описание кластера {cluster_id} не найдено")
+        else:
+            portrait['cluster_description'] = None
         
         logger.info(f"Портрет пользователя {user_id} успешно создан")
         return portrait
