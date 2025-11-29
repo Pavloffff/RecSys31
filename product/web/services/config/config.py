@@ -18,8 +18,20 @@ class KafkaConfig(BaseModel):
     enable_auto_commit: bool
 
 
+class WebBackendConfig(BaseModel):
+    host: str
+    port: int
+    timeout: float | None = 30.0
+    base_path: str | None = ""
+
+    @property
+    def base_url(self) -> str:
+        return f"http://{self.host}:{self.port}{self.base_path}"
+    
+
 class Config(BaseModel):
     kafka: KafkaConfig
+    web_backend: WebBackendConfig
     
     @classmethod
     def from_env(cls) -> 'Config':
@@ -33,6 +45,10 @@ class Config(BaseModel):
                 group_id=cls._getenv('KAFKA_OUT_GROUP_ID'),
                 initial_timeout=cls._getenv('KAFKA_INITIAL_TIMEOUT', int)
             ),
+            web_backend=WebBackendConfig(
+                host=cls._getenv('WEB_BACKEND_HOST'),
+                port=cls._getenv('WEB_BACKEND_PORT', int)
+            )
         )
     
     @staticmethod

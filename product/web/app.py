@@ -5,6 +5,8 @@ import time
 
 import streamlit as st
 
+from services.config.config import Config
+from services.http.client import SyncWebBackendClient
 from usecases.kafka.kafka_manager import data_manager, run_kafka_consumer
 
 kafka_thread = None
@@ -35,6 +37,9 @@ def main():
         page_icon="📊",
         layout="wide"
     )
+    
+    config = Config.from_env()
+    web_backend_client = SyncWebBackendClient(config.web_backend)
     
     if 'kafka_init' not in st.session_state:
         if init_kafka():
@@ -131,6 +136,7 @@ def main():
         user_id = st.text_input("Введите id пользователя:")
         submitted = st.form_submit_button("Отправить")
         if submitted and user_id:
+            web_backend_client.send_recommendation_request(user_id)
             st.success(f"Запрос отправлен для пользователя: {user_id}")
 
     current_message = data_manager.get_latest_message()
