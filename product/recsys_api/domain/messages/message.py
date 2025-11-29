@@ -9,6 +9,6 @@ class RecommendationRequest(BaseModel):
     :param user_id: ID пользователя
     :param context: Дополнительный контекст для рекомендаций
     """
-    user_id: str
+    user_id: int
     context: Dict[str, Any] = {}
 
