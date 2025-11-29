@@ -23,9 +23,28 @@ async def main():
     for message in consumer.listen():
         try:
             logger.info(f'Получено сообщение: {message}')
+            logger.debug(f'Тип сообщения: {type(message)}, Структура: {message if isinstance(message, dict) else "не словарь"}')
+            
+            if not isinstance(message, dict):
+                logger.error(f'Сообщение не является словарем. Тип: {type(message)}, Значение: {message}')
+                continue
+            
+            if 'user_id' not in message:
+                logger.error(f'В сообщении отсутствует обязательное поле "user_id". Доступные ключи: {list(message.keys())}')
+                logger.error(f'Полное содержимое сообщения: {message}')
+                continue
+            
+            user_id = message['user_id']
+            if not isinstance(user_id, int):
+                try:
+                    user_id = int(user_id)
+                    logger.warning(f'user_id преобразован из {type(message["user_id"])} в int: {user_id}')
+                except (ValueError, TypeError) as e:
+                    logger.error(f'user_id не может быть преобразован в int. Значение: {user_id}, Тип: {type(user_id)}')
+                    continue
             
             request = RecommendationRequest(
-                user_id=message['user_id'],
+                user_id=user_id,
                 context=message.get('context', {})
             )
             
@@ -34,6 +53,9 @@ async def main():
             logger.info(f'Обработан ответ: {response}')
             producer.produce(response.dict(), 'utf-8')
             
+        except KeyError as e:
+            logger.error(f'Отсутствует обязательное поле в сообщении: {e}. Доступные ключи: {list(message.keys()) if isinstance(message, dict) else "N/A"}', exc_info=True)
+            continue
         except Exception as e:
             logger.error(f'Ошибка при обработке сообщения: {e}', exc_info=True)
             continue
