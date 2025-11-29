@@ -25,7 +25,7 @@ class LlmClient:
         """
         self._config = config
         self._codec = JsonCodec()
-        self._producer = Producer(config.llm_kafka, self._codec)
+        self._producer = Producer(config.recsys_kafka, self._codec)
         self._consumer = Consumer(config.out_kafka, self._codec)
         
         self._pending_requests: Dict[str, Dict[str, Any]] = {}

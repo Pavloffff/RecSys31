@@ -79,10 +79,8 @@ services:
     environment:
       KAFKA_HOST: recsys-kafka
       KAFKA_PORT: 9092
-      KAFKA_RECSYS_TOPIC: recsys_llm_topic
-      KAFKA_RECSYS_GROUP_ID: recsys-api-group
-      KAFKA_LLM_TOPIC: recsys_llm_topic
-      KAFKA_LLM_GROUP_ID: recsys-llm-group
+      KAFKA_RECSYS_TOPIC: recsys_rec_topic
+      KAFKA_RECSYS_GROUP_ID: recsys-rec-group
       KAFKA_OUT_TOPIC: recsys_out_topic
       KAFKA_OUT_GROUP_ID: recsys-out-group
       KAFKA_AUTO_OFFSET_RESET: earliest
@@ -94,8 +92,6 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    ports:
-      - '8002:8002'
     volumes:
       - ./data:/data:ro
       - ./research:/research:ro

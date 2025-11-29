@@ -12,7 +12,7 @@ class RecommendationResponse(BaseModel):
     :param success: Флаг успешности
     :param error: Сообщение об ошибке (если есть)
     """
-    user_id: str
+    user_id: int
     recommendations: Optional[RecommendationsResponse] = None
     success: bool = True
     error: Optional[str] = None

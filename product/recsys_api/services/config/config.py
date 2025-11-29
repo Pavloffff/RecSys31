@@ -42,7 +42,6 @@ class Config(BaseModel):
     """Основная конфигурация приложения."""
 
     recsys_kafka: KafkaConfig
-    llm_kafka: KafkaConfig
     out_kafka: KafkaConfig
     app: AppConfig
     database: DatabaseConfig
@@ -63,16 +62,6 @@ class Config(BaseModel):
                 auto_offset_reset=cls._getenv('KAFKA_AUTO_OFFSET_RESET'),
                 enable_auto_commit=bool(cls._getenv('KAFKA_ENABLE_AUTO_COMMIT', int)),
                 group_id=cls._getenv('KAFKA_RECSYS_GROUP_ID'),
-                initial_timeout=cls._getenv('KAFKA_INITIAL_TIMEOUT', int),
-                retry_timeout=cls._getenv('KAFKA_RETRY_TIMEOUT', int, default=10)
-            ),
-            llm_kafka=KafkaConfig(
-                host=cls._getenv('KAFKA_HOST'),
-                port=cls._getenv('KAFKA_PORT', int),
-                topic=cls._getenv('KAFKA_LLM_TOPIC'),
-                auto_offset_reset=cls._getenv('KAFKA_AUTO_OFFSET_RESET'),
-                enable_auto_commit=bool(cls._getenv('KAFKA_ENABLE_AUTO_COMMIT', int)),
-                group_id=cls._getenv('KAFKA_LLM_GROUP_ID'),
                 initial_timeout=cls._getenv('KAFKA_INITIAL_TIMEOUT', int),
                 retry_timeout=cls._getenv('KAFKA_RETRY_TIMEOUT', int, default=10)
             ),
