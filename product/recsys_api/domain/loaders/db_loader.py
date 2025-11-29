@@ -4,6 +4,9 @@ from datetime import datetime
 from typing import Optional, List, Dict, Union
 import logging
 
+from domain.features.feature_engineering import create_user_features
+from domain.portraits.user_portrait import create_user_portrait_from_features, create_default_portrait
+
 logger = logging.getLogger(__name__)
 
 
@@ -259,4 +262,59 @@ def load_reference_data(db_config: Dict[str, Union[str, int]]) -> Dict[str, pd.D
     """
     loader = DatabaseLoader(**db_config)
     return loader.load_reference_data()
+
+
+def get_user_portrait_from_db(
+    user_id: int,
+    db_config: Optional[Dict[str, Union[str, int]]] = None
+) -> Dict:
+    """
+    Получает портрет пользователя из БД или создает дефолтный портрет, если пользователь не найден.
+    
+    :param user_id: ID пользователя
+    :param db_config: Словарь с параметрами подключения к БД (host, port, database, user, password)
+    :return: Словарь с портретом пользователя (всегда возвращает портрет, даже если пользователь не найден)
+    """
+    if db_config is None:
+        logger.warning(f"db_config не предоставлен, создается дефолтный портрет для пользователя {user_id}")
+        return create_default_portrait(user_id)
+    
+    try:
+        loader = DatabaseLoader(**db_config)
+        
+        events_df = loader.load_user_events(user_id)
+        
+        try:
+            reference_data = loader.load_reference_data()
+            users_df = reference_data.get('users', pd.DataFrame())
+        except Exception as e:
+            logger.warning(f"Не удалось загрузить справочные данные: {e}. Создается дефолтный портрет")
+            return create_default_portrait(user_id)
+        
+        user_exists = len(users_df) > 0 and user_id in users_df['user_id'].values
+        
+        if not user_exists:
+            logger.warning(f"Пользователь {user_id} не найден в справочнике пользователей. Создается дефолтный портрет")
+            return create_default_portrait(user_id)
+        
+        user_row = users_df[users_df['user_id'] == user_id]
+        if len(user_row) == 0:
+            logger.warning(f"Пользователь {user_id} не найден после фильтрации. Создается дефолтный портрет")
+            return create_default_portrait(user_id)
+        
+        user_features_df = create_user_features(events_df, user_row)
+        
+        portrait = create_user_portrait_from_features(user_id, user_features_df)
+        
+        if portrait is None:
+            logger.warning(f"Не удалось создать портрет для пользователя {user_id} из признаков. Создается дефолтный портрет")
+            return create_default_portrait(user_id)
+        
+        logger.info(f"Портрет пользователя {user_id} успешно создан")
+        return portrait
+        
+    except Exception as e:
+        logger.error(f"Ошибка при получении портрета пользователя {user_id}: {e}", exc_info=True)
+        logger.info(f"Создается дефолтный портрет для пользователя {user_id}")
+        return create_default_portrait(user_id)
 
