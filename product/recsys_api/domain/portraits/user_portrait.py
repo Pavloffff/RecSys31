@@ -78,3 +78,59 @@ def create_user_portrait_from_features(
     return portrait
 
 
+def create_default_portrait(user_id: int) -> Dict:
+    """
+    Создает дефолтный портрет для нового пользователя или пользователя без данных.
+    
+    :param user_id: ID пользователя
+    :return: Словарь с дефолтным портретом пользователя
+    """
+    portrait = {
+        'user_id': int(user_id),
+        'socdem_cluster': None,
+        'region': None,
+        
+        # Базовая статистика
+        'total_events': 0,
+        'first_event': None,
+        'last_event': None,
+        'activity_days': 0.0,
+        'events_per_day': 0.0,
+        
+        # Воронка конверсии
+        'view_count': 0,
+        'click_count': 0,
+        'purchase_count': 0,
+        'view_to_click_rate': 0.0,
+        'click_to_purchase_rate': 0.0,
+        'purchase_rate': 0.0,
+        
+        # Финансовые показатели
+        'total_spent': 0.0,
+        'avg_purchase': 0.0,
+        'std_purchase': 0.0,
+        
+        # Разнообразие
+        'unique_categories': 0,
+        'unique_brands': 0,
+        'unique_channels': 0,
+        'is_multi_channel': False,
+        'preferred_channel': 'unknown',
+        'top_category': 'unknown',
+        
+        # Временные паттерны
+        'avg_hour': 12.0,
+        'hour_std': 0.0,
+        'night_activity_ratio': 0.0,
+        
+        # Ценовые предпочтения
+        'avg_price_interest': 0.0,
+        'price_std': 0.0,
+        'min_price_interest': 0.0,
+        'max_price_interest': 0.0,
+        'price_range': 0.0,
+    }
+    
+    return portrait
+
+
