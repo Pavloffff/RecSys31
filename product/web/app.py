@@ -8,6 +8,7 @@ import streamlit as st
 from services.config.config import Config
 from services.http.client import SyncWebBackendClient
 from usecases.kafka.kafka_manager import data_manager, run_kafka_consumer
+from services.logger.logger import logger
 
 kafka_thread = None
 
@@ -118,7 +119,7 @@ def main():
     }
     """
 
-    default_data = json.loads(default_data_raw)
+    # default_data = json.loads(default_data_raw)
     
     # recommendations = json.loads(data)["recommendations"]
     # summary = json.loads(data)["summary"]
@@ -143,16 +144,16 @@ def main():
     
     if current_message:
         try:
-            recommendations = current_message.get("recommendations", default_data["recommendations"])
-            summary = current_message.get("summary", default_data["summary"])
+            recommendations = current_message.get("recommendations", {})
+            summary = current_message.get("summary", "")
             st.success("✅ Данные получены из Kafka")
         except Exception as e:
             st.error(f"Ошибка обработки: {e}")
-            recommendations = default_data["recommendations"]
-            summary = default_data["summary"]
+            recommendations = {}
+            summary = ""
     else:
-        recommendations = default_data["recommendations"]
-        summary = default_data["summary"]
+        recommendations = {}
+        summary = ""
     
     if st.button("Обновить данные"):
         st.rerun()
@@ -162,9 +163,12 @@ def main():
 
     st.header("Рекомендованные продукты:")
 
-    sorted_recommendations = sorted(recommendations, key=lambda x: x["priority"])
+    logger.info(f'GET RECS: {recommendations}')
+    # sorted_recommendations = sorted(recommendations, key=lambda x: x["priority"])
 
-    for rec in sorted_recommendations:
+    for rec in recommendations.values():
+        # logger.info(rec_raw)
+        # rec = json.loads(rec_raw)
         with st.container():
             col1, col2 = st.columns([4, 1])
             with col1:
