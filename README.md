@@ -32,10 +32,10 @@
 1. ID 27256137 - Пользователь - "высокий digital-активист с ночным паттерном поведения"
 
 ![ex1_1](./example1_input.jpeg)
-![ex1_2](./example1_result.jpeg)
+![ex1_2](./example1_res.jpeg)
 
 2. ID 542363 - "Случайный пользователь"
 
 ![ex2_1](./example2_input.jpeg)
-![ex2_2](./example2_result.jpeg)
+![ex2_2](./example2_res.jpeg)
 
