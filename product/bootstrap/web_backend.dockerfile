@@ -2,7 +2,6 @@ FROM python:3.10-slim AS builder
 WORKDIR /
 COPY ./product/web_backend/requirements.txt .
 RUN pip install --user --no-cache-dir -r requirements.txt
-COPY ./product/llm_api .
 
 FROM python:3.10-slim
 WORKDIR /

@@ -2,17 +2,17 @@
 Модуль для генерации рекомендаций продуктов с использованием LLM.
 
 Использует портрет пользователя и информацию о продуктах для генерации
-персонализированных рекомендаций через llm_api через Kafka.
+персонализированных рекомендаций через прямой вызов Yandex GPT API.
 """
 
 import json
+import os
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 
 from pydantic import BaseModel, Field
 
-from services.llm_client.llm_client import LlmClient
-from services.config.config import Config
+from domain.llm.yandex_api_llm import YandexApiLlm, YandexApiConfig
 from services.logger.logger import logger
 
 
@@ -30,6 +30,8 @@ class ProductRecommendation(BaseModel):
     priority: int = Field(..., ge=1, description="Приоритет рекомендации (1 - наивысший)")
     reasoning: str = Field(..., description="Обоснование, почему продукт подходит клиенту")
     key_benefits: List[str] = Field(default_factory=list, description="Список ключевых преимуществ")
+    marketing_strategy: str = Field(..., description="Маркетинговая стратегия банка")
+    consequences: str = Field(..., description="Ожидаемые результаты")
     match_score: float = Field(..., ge=0.0, le=1.0, description="Оценка соответствия продукта (0.0 - 1.0)")
 
 
@@ -54,8 +56,7 @@ class RecommendationPromptData(BaseModel):
     portrait_text: str = Field(..., description="Отформатированный текст портрета пользователя")
     products_text: str = Field(..., description="Текст с информацией о продуктах")
 
-# Глобальный клиент для переиспользования
-_llm_client: Optional[LlmClient] = None
+_llm: Optional[YandexApiLlm] = None
 
 
 def load_products_info(products_path: Optional[str] = None) -> str:
@@ -140,7 +141,7 @@ def format_portrait_for_prompt(portrait: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def create_recommendation_prompt(portrait_text: str, products_text: str) -> str:
+def create_recommendation_prompt(portrait_text: str, products_text: str, cluster_text: str="") -> str:
     """
     Создает промпт для LLM с портретом пользователя и информацией о продуктах.
     
@@ -158,15 +159,21 @@ def create_recommendation_prompt(portrait_text: str, products_text: str) -> str:
 ДОСТУПНЫЕ ПРОДУКТЫ:
 {products_text}
 
+ПОРТРЕТ СОЦИАЛЬНО-ДЕМОГРАФИЧЕСКОЙ ГРУППЫ, В КОТОРУЮ ВХОДИТ КЛИЕНТ:
+{cluster_text}
+
 ИНСТРУКЦИИ:
-1. Проанализируй портрет клиента и определи его финансовые потребности и предпочтения
+1. Проанализируй портрет клиента и его социально-демографическую группу, определи его финансовые потребности, предпочтения, сформулируй ожидаемые выводы и оптимальную маркетинговую стратегию взаимодействия для банка
 2. Выбери ТОП-5 наиболее подходящих продуктов из списка доступных
 3. Для каждого продукта укажи:
    - Название продукта
    - Краткое обоснование, почему этот продукт подходит клиенту
    - Ключевые преимущества для данного клиента
+   - Маркетинговую стратегию банка, которая обеспечит максимальную эффективность продажи этого продукта для этого человека
+   - Ожидаемые последствия продажи продукта: приблизительная количественная оценка потенциального финансового эффекта в российских реалиях и роста лояльности клиента
 4. Расположи рекомендации по приоритету (от наиболее подходящего к менее подходящему)
 5. Будь конкретным и используй данные из портрета для обоснования
+6. Избегай нелогичных или противоречивых предложений
 
 ФОРМАТ ОТВЕТА (JSON):
 {{
@@ -176,6 +183,8 @@ def create_recommendation_prompt(portrait_text: str, products_text: str) -> str:
       "priority": 1,
       "reasoning": "Почему продукт подходит клиенту",
       "key_benefits": ["Преимущество 1", "Преимущество 2"],
+      "marketing_strategy": "Маркетинговая стратегия",
+      "consequences": "Ожидаемые результаты",
       "match_score": 0.85
     }}
   ],
@@ -187,50 +196,60 @@ def create_recommendation_prompt(portrait_text: str, products_text: str) -> str:
     return prompt
 
 
-def _get_llm_client(config: Optional[Config] = None) -> Optional[LlmClient]:
+def _get_llm() -> Optional[YandexApiLlm]:
     """
-    Получает или создает глобальный LlmClient.
+    Получает или создает глобальный экземпляр YandexApiLlm.
     
-    :param config: Конфигурация (если None, создается из переменных окружения)
-    :return: LlmClient или None в случае ошибки
+    :return: YandexApiLlm или None в случае ошибки
     """
-    global _llm_client
+    global _llm
     
-    if _llm_client is None:
+    if _llm is None:
         try:
-            if config is None:
-                config = Config.from_env()
-            _llm_client = LlmClient(config)
-            logger.info("LlmClient initialized")
+            # Получаем конфигурацию из переменных окружения
+            folder_id = os.environ.get('YANDEX_GPT_FOLDER_ID')
+            api_key = os.environ.get('YANDEX_GPT_API_KEY')
+            
+            if not folder_id or not api_key:
+                logger.error("YANDEX_GPT_FOLDER_ID или YANDEX_GPT_API_KEY не установлены")
+                return None
+            
+            config = YandexApiConfig(folder_id=folder_id, api_key=api_key)
+            _llm = YandexApiLlm(config, timeout=120)
+            logger.info("YandexApiLlm initialized")
         except Exception as e:
-            logger.error(f"Failed to initialize LlmClient: {e}", exc_info=True)
+            logger.error(f"Failed to initialize YandexApiLlm: {e}", exc_info=True)
             return None
     
-    return _llm_client
+    return _llm
 
 
-def call_llm_api_via_kafka(prompt: str, config: Optional[Config] = None, timeout: int = 60) -> Optional[str]:
+def call_llm_api(prompt: str) -> Optional[str]:
     """
-    Вызывает LLM через llm_api через Kafka.
+    Вызывает LLM напрямую через Yandex GPT API.
     
     :param prompt: Промпт для LLM
-    :param config: Конфигурация (если None, создается из переменных окружения)
-    :param timeout: Таймаут ожидания ответа в секундах
     :return: Ответ от LLM или None в случае ошибки
     """
-    client = _get_llm_client(config)
-    if client is None:
-        logger.error("Failed to get LlmClient")
+    llm = _get_llm()
+    if llm is None:
+        logger.error("Failed to get YandexApiLlm")
         return None
     
     # Контекст для LLM (инструкции)
     context = "Ты - эксперт по банковским продуктам. Твоя задача - давать персонализированные рекомендации на основе анализа портрета клиента. Всегда отвечай ТОЛЬКО в формате JSON, без дополнительного текста."
     
     try:
-        response = client.invoke(context=context, text=prompt, timeout=timeout)
+        logger.info(f"RecSys: Отправка запроса в Yandex GPT API (длина промпта: {len(prompt)} символов)")
+        response = llm.invoke(context=context, question=prompt)
+        if response:
+            logger.info(f"RecSys: Получен ответ от модели LLM (длина: {len(response)} символов)")
+            logger.debug(f"RecSys: Полный ответ от модели: {response}")
+        else:
+            logger.error(f"RecSys: llm.invoke вернул None")
         return response
     except Exception as e:
-        logger.error(f"Error calling LLM via Kafka: {e}", exc_info=True)
+        logger.error(f"RecSys: Исключение при вызове LLM: {e}", exc_info=True)
         return None
 
 
@@ -271,17 +290,13 @@ def parse_llm_response(response: str) -> Optional[RecommendationsResponse]:
 
 def generate_recommendations_with_llm(
     portrait: Dict[str, Any],
-    products_path: Optional[str] = None,
-    config: Optional[Config] = None,
-    timeout: int = 60
+    products_path: Optional[str] = None
 ) -> Optional[RecommendationsResponse]:
     """
-    Генерирует рекомендации продуктов с использованием LLM через llm_api.
+    Генерирует рекомендации продуктов с использованием LLM.
     
     :param portrait: Портрет пользователя
     :param products_path: Путь к файлу с информацией о продуктах
-    :param config: Конфигурация для Kafka (если None, создается из переменных окружения)
-    :param timeout: Таймаут ожидания ответа в секундах
     :return: Валидированный объект RecommendationsResponse или None в случае ошибки
     """
     products_text = load_products_info(products_path)
@@ -290,13 +305,22 @@ def generate_recommendations_with_llm(
     
     prompt = create_recommendation_prompt(portrait_text, products_text)
     
-    response = call_llm_api_via_kafka(prompt, config, timeout)
+    logger.info(f"RecSys: Вызов LLM для генерации рекомендаций (длина промпта: {len(prompt)} символов)")
+    response = call_llm_api(prompt)
     
     if not response:
-        logger.error("❌ Не удалось получить ответ от LLM")
+        logger.error("RecSys: ❌ Не удалось получить ответ от LLM")
         return None
     
+    logger.info(f"RecSys: Ответ от модели успешно получен, начинаем парсинг (длина ответа: {len(response)} символов)")
     recommendations = parse_llm_response(response)
+    
+    if recommendations:
+        logger.info(f"RecSys: Рекомендации успешно распарсены. Количество рекомендаций: {len(recommendations.recommendations)}")
+    else:
+        logger.warning("RecSys: Не удалось распарсить ответ от модели. Возможно, ответ не в формате JSON или не соответствует схеме.")
+        logger.debug(f"RecSys: Сырой ответ для анализа: {response[:500]}...")
+    
     return recommendations
 
 

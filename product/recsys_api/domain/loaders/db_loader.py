@@ -1,13 +1,45 @@
 import pandas as pd
 import psycopg2
 from datetime import datetime
-from typing import Optional, List, Dict, Union
+from typing import Optional, List, Dict, Union, Any
 import logging
 
 from domain.features.feature_engineering import create_user_features
 from domain.portraits.user_portrait import create_user_portrait_from_features, create_default_portrait
 
 logger = logging.getLogger(__name__)
+
+
+def _convert_db_config_to_dict(db_config: Union[Dict[str, Union[str, int]], Any]) -> Dict[str, Union[str, int]]:
+    """
+    Преобразует db_config в словарь.
+    
+    Поддерживает:
+    - Словари (dict)
+    - Pydantic модели (DatabaseConfig) через model_dump() или dict()
+    - Объекты с атрибутами (host, port, database, user, password)
+    
+    :param db_config: Конфигурация БД в любом формате
+    :return: Словарь с параметрами подключения к БД
+    :raises: AttributeError если не удалось преобразовать
+    """
+    if isinstance(db_config, dict):
+        return db_config
+    elif hasattr(db_config, 'model_dump'):
+        # Pydantic v2
+        return db_config.model_dump()
+    elif hasattr(db_config, 'dict'):
+        # Pydantic v1
+        return db_config.dict()
+    else:
+        # Объект с атрибутами
+        return {
+            'host': db_config.host,
+            'port': db_config.port,
+            'database': db_config.database,
+            'user': db_config.user,
+            'password': db_config.password
+        }
 
 
 class DatabaseLoader:
@@ -219,7 +251,7 @@ class DatabaseLoader:
 
 def load_user_events(
     user_id: int,
-    db_config: Dict[str, Union[str, int]],
+    db_config: Union[Dict[str, Union[str, int]], Any],
     channels: Optional[List[str]] = None
 ) -> pd.DataFrame:
     """
@@ -227,15 +259,17 @@ def load_user_events(
 
     :param user_id: ID пользователя
     :param db_config: Словарь с параметрами подключения к БД (host, port, database, user, password)
+                     или объект DatabaseConfig (Pydantic модель)
     :param channels: Список каналов для загрузки (None = все каналы)
     :return: DataFrame с событиями пользователя
     """
-    loader = DatabaseLoader(**db_config)
+    db_config_dict = _convert_db_config_to_dict(db_config)
+    loader = DatabaseLoader(**db_config_dict)
     return loader.load_user_events(user_id, channels)
 
 
 def load_all_events(
-    db_config: Dict[str, Union[str, int]],
+    db_config: Union[Dict[str, Union[str, int]], Any],
     channels: Optional[List[str]] = None,
     sample_users: Optional[List[int]] = None,
     limit: Optional[int] = None
@@ -244,35 +278,40 @@ def load_all_events(
     Загружает все события из БД с возможностью фильтрации.
 
     :param db_config: Словарь с параметрами подключения к БД (host, port, database, user, password)
+                     или объект DatabaseConfig (Pydantic модель)
     :param channels: Список каналов для загрузки (None = все каналы)
     :param sample_users: Список user_id для фильтрации (None = все пользователи)
     :param limit: Ограничение количества записей (None = без ограничений)
     :return: DataFrame со всеми событиями
     """
-    loader = DatabaseLoader(**db_config)
+    db_config_dict = _convert_db_config_to_dict(db_config)
+    loader = DatabaseLoader(**db_config_dict)
     return loader.load_all_events(channels, sample_users, limit)
 
 
-def load_reference_data(db_config: Dict[str, Union[str, int]]) -> Dict[str, pd.DataFrame]:
+def load_reference_data(db_config: Union[Dict[str, Union[str, int]], Any]) -> Dict[str, pd.DataFrame]:
     """
     Загружает справочные данные (пользователи, товары, бренды) из БД.
 
     :param db_config: Словарь с параметрами подключения к БД (host, port, database, user, password)
+                     или объект DatabaseConfig (Pydantic модель)
     :return: Словарь с DataFrame справочников
     """
-    loader = DatabaseLoader(**db_config)
+    db_config_dict = _convert_db_config_to_dict(db_config)
+    loader = DatabaseLoader(**db_config_dict)
     return loader.load_reference_data()
 
 
 def get_user_portrait_from_db(
     user_id: int,
-    db_config: Optional[Dict[str, Union[str, int]]] = None
+    db_config: Optional[Union[Dict[str, Union[str, int]], Any]] = None
 ) -> Dict:
     """
     Получает портрет пользователя из БД или создает дефолтный портрет, если пользователь не найден.
     
     :param user_id: ID пользователя
     :param db_config: Словарь с параметрами подключения к БД (host, port, database, user, password)
+                     или объект DatabaseConfig (Pydantic модель)
     :return: Словарь с портретом пользователя (всегда возвращает портрет, даже если пользователь не найден)
     """
     if db_config is None:
@@ -280,7 +319,13 @@ def get_user_portrait_from_db(
         return create_default_portrait(user_id)
     
     try:
-        loader = DatabaseLoader(**db_config)
+        try:
+            db_config_dict = _convert_db_config_to_dict(db_config)
+        except (AttributeError, TypeError) as e:
+            logger.error(f"Не удалось преобразовать db_config в словарь. Тип: {type(db_config)}, ошибка: {e}")
+            return create_default_portrait(user_id)
+        
+        loader = DatabaseLoader(**db_config_dict)
         
         events_df = loader.load_user_events(user_id)
         
