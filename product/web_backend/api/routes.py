@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from starlette.requests import Request
 
-from domain.yandexgpt.request import Request as YandexGptRequest
+from domain.message.message import Message
 from services.logger.logger import logger
 from services.kafka.producer import Producer
 from usecases.user_data.get_user_data import GetUserData
@@ -18,19 +18,13 @@ async def send_recomend_request(
         producer: Producer = request.app.state.producer
         
         async with request.app.state.postgres_session() as session:
-            user_data = GetUserData.get(session, user_id)
-            
-            if user_data is None:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f'user with id={user_id} not found'    
-                )
-            
-            producer.produce(user_data.dict(), 'utf-8')
-                            
+            message = Message(user_id=user_id, context={})
+            producer.produce(message.dict(), 'utf-8')
+
         return {
             "status": "success",
         }
+        
     except Exception as e:
         logger.error(f"Error processing request: {str(e)}")
         raise HTTPException(
