@@ -29,12 +29,17 @@ services:
     environment:
       KAFKA_HOST: recsys-kafka
       KAFKA_PORT: 9092
-      KAFKA_LLM_TOPIC: recsys_llm_topic
-      KAFKA_LLM_GROUP_ID: recsys-llm-group
+      KAFKA_REC_TOPIC: recsys_rec_topic
+      KAFKA_REC_GROUP_ID: recsys-rec-group
       KAFKA_AUTO_OFFSET_RESET: earliest
       KAFKA_ENABLE_AUTO_COMMIT: 1
       KAFKA_INITIAL_TIMEOUT: 20
       KAFKA_RETRY_TIMEOUT: 10
+      POSTGRES_HOST: recsys-database
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
       - '8001:8000' # удалить
     networks:
