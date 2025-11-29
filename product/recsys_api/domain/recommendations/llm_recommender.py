@@ -303,7 +303,12 @@ def generate_recommendations_with_llm(
     
     portrait_text = format_portrait_for_prompt(portrait)
     
-    prompt = create_recommendation_prompt(portrait_text, products_text)
+
+    cluster_text = portrait.get('cluster_description', '')
+    if not cluster_text:
+        cluster_text = "Информация о социально-демографическом кластере недоступна."
+    
+    prompt = create_recommendation_prompt(portrait_text, products_text, cluster_text)
     
     logger.info(f"RecSys: Вызов LLM для генерации рекомендаций (длина промпта: {len(prompt)} символов)")
     response = call_llm_api(prompt)

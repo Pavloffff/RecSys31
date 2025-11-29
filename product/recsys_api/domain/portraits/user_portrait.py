@@ -89,6 +89,7 @@ def create_default_portrait(user_id: int) -> Dict:
         'user_id': int(user_id),
         'socdem_cluster': None,
         'region': None,
+        'cluster_description': None,
         
         # Базовая статистика
         'total_events': 0,
